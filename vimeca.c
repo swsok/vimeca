@@ -500,12 +500,15 @@ int main(int argc, char *argv[]) {
     if (!E.content_snapshot) die("malloc");
     memcpy(E.content_snapshot, E.mapped, E.file_size);
 
+printf("%d\n", __LINE__);
     if (getWindowSize(&E.screen_rows, &E.screen_cols) == -1) die("getWindowSize");
-
+printf("%d\n", __LINE__);
     enableRawMode();
 
+printf("%d\n", __LINE__);
     refreshScreen();
 
+printf("%d\n", __LINE__);
     while (1) {
         fd_set readfds;
         struct timeval tv;
