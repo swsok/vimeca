@@ -70,13 +70,26 @@ void enableRawMode() {
 
 int getWindowSize(int *rows, int *cols) {
     struct winsize ws;
-    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0) {
-        return -1;
-    } else {
+
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) != -1 && ws.ws_col != 0) {
         *cols = ws.ws_col;
         *rows = ws.ws_row;
         return 0;
     }
+
+    if (ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) != -1 && ws.ws_col != 0) {
+        *cols = ws.ws_col;
+        *rows = ws.ws_row;
+        return 0;
+    }
+
+    if (ioctl(STDERR_FILENO, TIOCGWINSZ, &ws) != -1 && ws.ws_col != 0) {
+        *cols = ws.ws_col;
+        *rows = ws.ws_row;
+        return 0;
+    }
+
+    return -1;
 }
 
 size_t getLineStart(size_t pos) {
@@ -500,15 +513,10 @@ int main(int argc, char *argv[]) {
     if (!E.content_snapshot) die("malloc");
     memcpy(E.content_snapshot, E.mapped, E.file_size);
 
-printf("%d\n", __LINE__);
     if (getWindowSize(&E.screen_rows, &E.screen_cols) == -1) die("getWindowSize");
-printf("%d\n", __LINE__);
     enableRawMode();
-
-printf("%d\n", __LINE__);
     refreshScreen();
 
-printf("%d\n", __LINE__);
     while (1) {
         fd_set readfds;
         struct timeval tv;
