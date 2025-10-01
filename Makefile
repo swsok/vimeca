@@ -1,11 +1,11 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -O2 -static
+CFLAGS = -Wall -Wextra -O2 -static -g
 TARGET = vimeca
 SRC = vimeca.c
 
 all: $(TARGET)
 
-$(TARGET): $(SRC)
+$(TARGET): $(SRC) Makefile
 	$(CC) $(CFLAGS) -o $(TARGET) $(SRC)
 
 clean:

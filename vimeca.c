@@ -41,8 +41,9 @@ struct EditorState {
 struct EditorState E;
 
 void die(const char *s) {
-    write(STDOUT_FILENO, "\x1b[2J", 4);
-    write(STDOUT_FILENO, "\x1b[H", 3);
+    ssize_t __attribute__((unused)) ret;
+    ret = write(STDOUT_FILENO, "\x1b[2J", 4);
+    ret = write(STDOUT_FILENO, "\x1b[H", 3);
     perror(s);
     exit(1);
 }
@@ -299,13 +300,15 @@ void refreshScreen() {
     buf[buf_len++] = '5';
     buf[buf_len++] = 'h';
 
-    write(STDOUT_FILENO, buf, buf_len);
+    ssize_t __attribute__((unused)) ret;
+    ret = write(STDOUT_FILENO, buf, buf_len);
 }
 
 void processCommand() {
+    ssize_t __attribute__((unused)) ret;
     if (E.command_len == 1 && E.command_buf[0] == 'q') {
-        write(STDOUT_FILENO, "\x1b[2J", 4);
-        write(STDOUT_FILENO, "\x1b[H", 3);
+        ret = write(STDOUT_FILENO, "\x1b[2J", 4);
+        ret = write(STDOUT_FILENO, "\x1b[H", 3);
         munmap(E.mapped, E.file_size);
         close(E.fd);
         exit(0);
@@ -398,7 +401,7 @@ void processKeypress() {
                 E.mode = MODE_NORMAL;
             }
         } else if (isprint(c)) {
-            if (E.command_len < sizeof(E.command_buf) - 1) {
+            if (E.command_len < (int)sizeof(E.command_buf) - 1) {
                 E.command_buf[E.command_len++] = c;
                 E.command_buf[E.command_len] = '\0';
             }
@@ -441,10 +444,11 @@ void processKeypress() {
             break;
         case 'q':
             {
+                ssize_t __attribute__((unused)) ret;
                 int next = readKey();
                 if (next == 'q') {
-                    write(STDOUT_FILENO, "\x1b[2J", 4);
-                    write(STDOUT_FILENO, "\x1b[H", 3);
+                    ret = write(STDOUT_FILENO, "\x1b[2J", 4);
+                    ret = write(STDOUT_FILENO, "\x1b[H", 3);
                     munmap(E.mapped, E.file_size);
                     close(E.fd);
                     exit(0);
@@ -455,29 +459,31 @@ void processKeypress() {
 }
 
 int main(int argc, char *argv[]) {
-    if (argc != 3) {
-        fprintf(stderr, "Usage: %s <filename> <offset>\n", argv[0]);
+    if (argc != 4) {
+        fprintf(stderr, "Usage: %s <filename> <offset> <size>\n", argv[0]);
         return 1;
     }
 
     const char *filename = argv[1];
-    E.offset = strtoul(argv[2], NULL, 0);
+    size_t offset = strtoul(argv[2], NULL, 0);
 
     E.fd = open(filename, O_RDWR);
     if (E.fd == -1) die("open");
 
+    E.file_size = strtoul(argv[3], NULL, 0);;
+
     struct stat sb;
     if (fstat(E.fd, &sb) == -1) die("fstat");
 
-    if ((size_t)sb.st_size < E.offset) {
+/*    if ((size_t)sb.st_size < E.offset) {
         fprintf(stderr, "Error: offset 0x%zx is beyond file size %ld\n",
                 E.offset, sb.st_size);
         close(E.fd);
         return 1;
     }
+*/
 
-    E.file_size = sb.st_size;
-    E.mapped = mmap(NULL, E.file_size, PROT_READ | PROT_WRITE, MAP_SHARED, E.fd, 0);
+    E.mapped = mmap(NULL, E.file_size, PROT_READ | PROT_WRITE, MAP_SHARED, E.fd, offset);
     if (E.mapped == MAP_FAILED) die("mmap");
 
     E.cursor_x = 0;
@@ -488,6 +494,7 @@ int main(int argc, char *argv[]) {
     E.mode = MODE_NORMAL;
     E.command_len = 0;
     E.status_msg[0] = '\0';
+    E.offset = 0;
 
     E.content_snapshot = malloc(E.file_size);
     if (!E.content_snapshot) die("malloc");
@@ -533,7 +540,7 @@ int main(int argc, char *argv[]) {
                         E.mode = MODE_NORMAL;
                     }
                 } else if (isprint(c)) {
-                    if (E.command_len < sizeof(E.command_buf) - 1) {
+                    if (E.command_len < (int)sizeof(E.command_buf) - 1) {
                         E.command_buf[E.command_len++] = c;
                         E.command_buf[E.command_len] = '\0';
                     }
@@ -571,10 +578,11 @@ int main(int argc, char *argv[]) {
                         break;
                     case 'q':
                         {
+                            ssize_t __attribute__((unused)) ret;
                             int next = readKey();
                             if (next == 'q') {
-                                write(STDOUT_FILENO, "\x1b[2J", 4);
-                                write(STDOUT_FILENO, "\x1b[H", 3);
+                                ret = write(STDOUT_FILENO, "\x1b[2J", 4);
+                                ret = write(STDOUT_FILENO, "\x1b[H", 3);
                                 munmap(E.mapped, E.file_size);
                                 close(E.fd);
                                 exit(0);
@@ -585,7 +593,7 @@ int main(int argc, char *argv[]) {
             }
 
             if (old_cursor_x != (int)E.cursor_x || old_cursor_y != (int)E.cursor_y ||
-                old_mode != E.mode || old_screen_row_offset != E.screen_row_offset ||
+                old_mode != (int)E.mode || old_screen_row_offset != E.screen_row_offset ||
                 old_col_offset != E.col_offset || E.command_len > 0) {
                 refreshScreen();
                 updateSnapshot();
