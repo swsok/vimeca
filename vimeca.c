@@ -9,6 +9,7 @@
 #include <sys/ioctl.h>
 #include <sys/select.h>
 #include <ctype.h>
+#include <sys/time.h>
 
 #define CTRL_KEY(k) ((k) & 0x1f)
 
@@ -42,8 +43,8 @@ struct EditorState E;
 
 void die(const char *s) {
     ssize_t __attribute__((unused)) ret;
-    ret = write(STDOUT_FILENO, "\x1b[2J", 4);
-    ret = write(STDOUT_FILENO, "\x1b[H", 3);
+//    ret = write(STDOUT_FILENO, "\x1b[2J", 4);
+//    ret = write(STDOUT_FILENO, "\x1b[H", 3);
     perror(s);
     exit(1);
 }
@@ -69,24 +70,22 @@ void enableRawMode() {
 }
 
 int getWindowSize(int *rows, int *cols) {
+    int ret;
     struct winsize ws;
+    ws.ws_col = 0;
+    ws.ws_row = 0;
 
-    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) != -1 && ws.ws_col != 0) {
-        *cols = ws.ws_col;
-        *rows = ws.ws_row;
-        return 0;
-    }
+    ret = ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws);
 
-    if (ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) != -1 && ws.ws_col != 0) {
-        *cols = ws.ws_col;
-        *rows = ws.ws_row;
-        return 0;
-    }
-
-    if (ioctl(STDERR_FILENO, TIOCGWINSZ, &ws) != -1 && ws.ws_col != 0) {
-        *cols = ws.ws_col;
-        *rows = ws.ws_row;
-        return 0;
+    if ( ret != -1 ) {
+	if ( ws.ws_col != 0) {
+		*cols = ws.ws_col;
+		*rows = ws.ws_row;
+	} else {
+	    *cols = 80;
+	    *rows = 25;
+	}
+    return 0;
     }
 
     return -1;
@@ -472,6 +471,12 @@ void processKeypress() {
 }
 
 int main(int argc, char *argv[]) {
+
+    #define REFRESH_INTERVAL 100000 //microseconds
+    long elapsed_time;
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+
     if (argc != 4) {
         fprintf(stderr, "Usage: %s <filename> <offset> <size>\n", argv[0]);
         return 1;
@@ -611,9 +616,12 @@ int main(int argc, char *argv[]) {
             }
         }
         } else {
-            if (hasContentChanged()) {
+	    gettimeofday(&end, NULL);
+	    elapsed_time = (end.tv_sec - start.tv_sec) * 1000000L + (end.tv_usec - start.tv_usec);
+            if ( elapsed_time > REFRESH_INTERVAL && hasContentChanged()) {
                 refreshScreen();
                 updateSnapshot();
+		gettimeofday(&start, NULL);
             }
         }
     }
