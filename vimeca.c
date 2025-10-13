@@ -37,6 +37,7 @@ struct EditorState {
     char status_msg[256];
     struct termios orig_termios;
     char *content_snapshot;
+    int content_modified;
 };
 
 struct EditorState E;
@@ -194,6 +195,47 @@ void insertChar(char c) {
             E.cursor_x++;
         }
         msync(E.mapped + E.offset, E.file_size, MS_SYNC);
+        E.content_modified = 1;
+    }
+}
+
+void deleteChar() {
+    size_t pos = getCursorPos();
+    if (pos < E.offset + E.file_size - 1 && E.mapped[pos] != '\n') {
+        memmove(&E.mapped[pos], &E.mapped[pos + 1], E.offset + E.file_size - pos - 1);
+        msync(E.mapped + E.offset, E.file_size, MS_SYNC);
+        E.content_modified = 1;
+    }
+}
+
+void deleteLine() {
+    size_t pos = getCursorPos();
+    size_t line_start = getLineStart(pos);
+    size_t line_end = getLineEnd(line_start);
+
+    // Include the newline character if it exists
+    size_t delete_end = line_end;
+    if (delete_end < E.offset + E.file_size && E.mapped[delete_end] == '\n') {
+        delete_end++;
+    }
+
+    size_t delete_len = delete_end - line_start;
+
+    if (delete_len > 0 && delete_end <= E.offset + E.file_size) {
+        memmove(&E.mapped[line_start], &E.mapped[delete_end],
+                E.offset + E.file_size - delete_end);
+
+        // Move cursor to start of line
+        E.cursor_x = 0;
+
+        // If we deleted the last line and cursor is beyond the new last line, move up
+        size_t total_lines = countLines();
+        if (E.cursor_y >= total_lines && total_lines > 0) {
+            E.cursor_y = total_lines - 1;
+        }
+
+        msync(E.mapped + E.offset, E.file_size, MS_SYNC);
+        E.content_modified = 1;
     }
 }
 
@@ -394,6 +436,21 @@ int readKey() {
     return readKeyNonBlocking();
 }
 
+int readKeyBlocking() {
+    int c;
+    while ((c = readKeyNonBlocking()) == -1) {
+        // Wait for input
+        fd_set readfds;
+        struct timeval tv;
+        FD_ZERO(&readfds);
+        FD_SET(STDIN_FILENO, &readfds);
+        tv.tv_sec = 0;
+        tv.tv_usec = 50000;
+        select(STDIN_FILENO + 1, &readfds, NULL, NULL, &tv);
+    }
+    return c;
+}
+
 void processKeypress() {
     int c = readKey();
     if (c == -1) return;
@@ -452,12 +509,20 @@ void processKeypress() {
             moveCursor(c);
             break;
         case 'x':
-            insertChar(' ');
+            deleteChar();
+            break;
+        case 'd':
+            {
+                int next = readKeyBlocking();
+                if (next == 'd') {
+                    deleteLine();
+                }
+            }
             break;
         case 'q':
             {
                 ssize_t __attribute__((unused)) ret;
-                int next = readKey();
+                int next = readKeyBlocking();
                 if (next == 'q') {
                     ret = write(STDOUT_FILENO, "\x1b[2J", 4);
                     ret = write(STDOUT_FILENO, "\x1b[H", 3);
@@ -513,6 +578,7 @@ int main(int argc, char *argv[]) {
     E.command_len = 0;
     E.status_msg[0] = '\0';
     E.offset = 0;
+    E.content_modified = 0;
 
     E.content_snapshot = malloc(E.file_size);
     if (!E.content_snapshot) die("malloc");
@@ -590,12 +656,20 @@ int main(int argc, char *argv[]) {
                         moveCursor(c);
                         break;
                     case 'x':
-                        insertChar(' ');
+                        deleteChar();
+                        break;
+                    case 'd':
+                        {
+                            int next = readKeyBlocking();
+                            if (next == 'd') {
+                                deleteLine();
+                            }
+                        }
                         break;
                     case 'q':
                         {
                             ssize_t __attribute__((unused)) ret;
-                            int next = readKey();
+                            int next = readKeyBlocking();
                             if (next == 'q') {
                                 ret = write(STDOUT_FILENO, "\x1b[2J", 4);
                                 ret = write(STDOUT_FILENO, "\x1b[H", 3);
@@ -610,9 +684,10 @@ int main(int argc, char *argv[]) {
 
             if (old_cursor_x != (int)E.cursor_x || old_cursor_y != (int)E.cursor_y ||
                 old_mode != (int)E.mode || old_screen_row_offset != E.screen_row_offset ||
-                old_col_offset != E.col_offset || E.command_len > 0) {
+                old_col_offset != E.col_offset || E.command_len > 0 || E.content_modified) {
                 refreshScreen();
                 updateSnapshot();
+                E.content_modified = 0;
             }
         }
         } else {
