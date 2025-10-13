@@ -537,7 +537,7 @@ void processKeypress() {
 
 int main(int argc, char *argv[]) {
 
-    #define REFRESH_INTERVAL 100000 //microseconds
+    #define REFRESH_INTERVAL 1000000 //microseconds
     long elapsed_time;
     struct timeval start, end;
     gettimeofday(&start, NULL);
