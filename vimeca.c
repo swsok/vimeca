@@ -542,13 +542,15 @@ int main(int argc, char *argv[]) {
     struct timeval start, end;
     gettimeofday(&start, NULL);
 
-    if (argc != 4) {
-        fprintf(stderr, "Usage: %s <filename> <offset> <size>\n", argv[0]);
+    if (argc != 4 && argc != 5) {
+        fprintf(stderr, "Usage: %s <filename> <offset> <size> [clear]\n", argv[0]);
+        fprintf(stderr, "  clear: optional argument (any value) to zero out the mapped range\n");
         return 1;
     }
 
     const char *filename = argv[1];
     size_t offset = strtoul(argv[2], NULL, 0);
+    int should_clear = (argc == 5);
 
     E.fd = open(filename, O_RDWR);
     if (E.fd == -1) die("open");
@@ -568,6 +570,12 @@ int main(int argc, char *argv[]) {
 
     E.mapped = mmap(NULL, E.file_size, PROT_READ | PROT_WRITE, MAP_SHARED, E.fd, offset);
     if (E.mapped == MAP_FAILED) die("mmap");
+
+    // Clear the mapped range if requested
+    if (should_clear) {
+        memset(E.mapped, 0, E.file_size);
+        msync(E.mapped, E.file_size, MS_SYNC);
+    }
 
     E.cursor_x = 0;
     E.cursor_y = 0;
