@@ -602,7 +602,7 @@ int main(int argc, char *argv[]) {
         FD_ZERO(&readfds);
         FD_SET(STDIN_FILENO, &readfds);
         tv.tv_sec = 0;
-        tv.tv_usec = 5000;
+        tv.tv_usec = 50000;
 
         int ret = select(STDIN_FILENO + 1, &readfds, NULL, NULL, &tv);
 
